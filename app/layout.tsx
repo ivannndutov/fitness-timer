@@ -4,9 +4,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
-  title: "v0 App",
-  description: "Created with v0",
-  generator: "v0.dev",
+  title: "Таймер тренувань",
+  description: "Створюй тренування та відстежуй свої прогреси",
 };
 
 export default function RootLayout({

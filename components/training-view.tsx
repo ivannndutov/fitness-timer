@@ -10,6 +10,7 @@ import {
   FastForward,
 } from "lucide-react";
 import dynamic from "next/dynamic";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -98,7 +99,7 @@ export default function TrainingView({
           if (index < training.exercises.length - 1 && training.restTime > 0) {
             sequence.push({
               id: `rest-${index}`,
-              name: "Rest",
+              name: "Відпочинок",
               duration: training.restTime,
               isRest: true,
             });
@@ -130,6 +131,52 @@ export default function TrainingView({
     };
   }, [training, allExercises]);
 
+  // Add timer effect
+  useEffect(() => {
+    if (!isRunning || !exerciseSequence.length) return;
+
+    const currentExercise = exerciseSequence[currentExerciseIndex];
+    if (!currentExercise) return;
+
+    timerRef.current = setInterval(() => {
+      setTimeRemaining((prev) => {
+        if (prev <= 1) {
+          const nextIndex = currentExerciseIndex + 1;
+
+          if (nextIndex >= exerciseSequence.length) {
+            // Handle completion
+            clearInterval(timerRef.current!);
+            timerRef.current = null;
+            setIsRunning(false);
+            setCurrentExerciseIndex(exerciseSequence.length);
+            setElapsedTime((prev) => prev + currentExercise.duration);
+            setShowConfetti(true);
+            audioRef.current = new Audio("/win.mp3");
+            audioRef.current?.play();
+            setTimeout(() => setShowConfetti(false), 5000);
+            return 0;
+          }
+
+          // Move to next exercise
+          clearInterval(timerRef.current!);
+          timerRef.current = null;
+          setCurrentExerciseIndex(nextIndex);
+          setElapsedTime((prev) => prev + currentExercise.duration);
+          audioRef.current?.play();
+          return exerciseSequence[nextIndex].duration;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [isRunning, currentExerciseIndex, exerciseSequence]);
+
   const getCurrentExercise = () => {
     if (!exerciseSequence || currentExerciseIndex >= exerciseSequence.length) {
       return null;
@@ -140,41 +187,33 @@ export default function TrainingView({
 
   const handleStart = () => {
     if (!exerciseSequence || exerciseSequence.length === 0) return;
-
     setIsRunning(true);
     audioRef.current?.play();
+  };
 
-    timerRef.current = setInterval(() => {
-      setElapsedTime((prev) => {
-        console.log(prev);
-        return prev + 1;
-      });
-      setTimeRemaining((prev) => {
-        if (prev <= 1) {
-          const nextIndex = currentExerciseIndex + 1;
+  const handleSkip = () => {
+    if (!exerciseSequence || exerciseSequence.length === 0) return;
 
-          if (nextIndex >= exerciseSequence.length) {
-            clearInterval(timerRef.current!);
-            setIsRunning(false);
-            setCurrentExerciseIndex(nextIndex);
-            setShowConfetti(true);
-            audioRef.current = new Audio("/win.mp3");
-            audioRef.current?.play();
-            audioRef.current = new Audio("/beep.mp3");
-            // Hide confetti after 5 seconds
-            setTimeout(() => setShowConfetti(false), 5000);
-            return 0;
-          } else {
-            // Move to next exercise
-            setCurrentExerciseIndex(nextIndex);
-            audioRef.current?.play();
-            return exerciseSequence[nextIndex].duration;
-          }
-        }
+    const nextIndex = currentExerciseIndex + 1;
+    if (nextIndex >= exerciseSequence.length) {
+      // Handle completion state
+      handlePause();
+      setCurrentExerciseIndex(exerciseSequence.length);
+      setTimeRemaining(0);
+      const lastExercise = exerciseSequence[currentExerciseIndex];
+      setElapsedTime((prev) => prev + lastExercise.duration);
+      setShowConfetti(true);
+      audioRef.current = new Audio("/win.mp3");
+      audioRef.current?.play();
+      setTimeout(() => setShowConfetti(false), 5000);
+      return;
+    }
 
-        return prev - 1;
-      });
-    }, 1000);
+    // Calculate elapsed time for skipped exercise
+    const skippedExercise = exerciseSequence[currentExerciseIndex];
+    setElapsedTime((prev) => prev + skippedExercise.duration);
+    setCurrentExerciseIndex(nextIndex);
+    setTimeRemaining(exerciseSequence[nextIndex].duration);
   };
 
   const handlePause = () => {
@@ -189,6 +228,7 @@ export default function TrainingView({
     setIsRunning(false);
     setCurrentExerciseIndex(0);
     setElapsedTime(0);
+    setShowConfetti(false);
 
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -197,19 +237,6 @@ export default function TrainingView({
 
     if (exerciseSequence && exerciseSequence.length > 0) {
       setTimeRemaining(exerciseSequence[0].duration);
-    }
-  };
-
-  const handleSkip = () => {
-    if (exerciseSequence && exerciseSequence.length > 0) {
-      setCurrentExerciseIndex((prev) => prev + 1);
-      if (currentExerciseIndex < exerciseSequence.length) {
-        setTimeRemaining(exerciseSequence[currentExerciseIndex + 1].duration);
-      } else {
-        setTimeRemaining(0);
-        clearInterval(timerRef.current!);
-        setIsRunning(false);
-      }
     }
   };
 
@@ -277,50 +304,121 @@ export default function TrainingView({
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {exerciseSequence.map((ex, index) => (
-              <div
-                key={ex.id}
-                className={`p-3 rounded-md border text-center ${
-                  index === currentExerciseIndex
-                    ? "bg-primary/10 border-primary"
-                    : index < currentExerciseIndex
-                    ? "bg-muted/50 border-muted"
-                    : ""
-                } ${ex.isRest ? "bg-muted/30" : ""}`}
+          <div className="flex justify-center gap-4">
+            {isRunning ? (
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={handlePause}
+                className="w-[180px]"
               >
-                <div className="font-medium truncate">{ex.name}</div>
-                <div className="text-sm text-muted-foreground">
-                  {ex.duration}s
-                </div>
-              </div>
-            ))}
+                <Pause className="mr-2 h-5 w-5" />
+                Пауза
+              </Button>
+            ) : (
+              <Button
+                size="lg"
+                onClick={handleStart}
+                disabled={isComplete}
+                className="w-[180px]"
+              >
+                <Play className="mr-2 h-5 w-5" />
+                {currentExerciseIndex === 0 &&
+                timeRemaining === exerciseSequence[0]?.duration
+                  ? "Старт"
+                  : "Продовжити"}
+              </Button>
+            )}
+            <Button size="lg" variant="outline" onClick={handleReset}>
+              <RotateCcw className="mr-2 h-5 w-5" />
+              Скинути
+            </Button>
+            <Button size="lg" variant="outline" onClick={handleSkip}>
+              <FastForward className="mr-2 h-5 w-5" />
+              Пропустити
+            </Button>
+          </div>
+
+          <div className="relative h-[100px] mx-auto w-full max-w-[800px] overflow-hidden">
+            <div className="absolute inset-0 flex items-center justify-center">
+              <AnimatePresence mode="popLayout">
+                {exerciseSequence
+                  .slice(
+                    Math.max(0, currentExerciseIndex - 1),
+                    Math.min(exerciseSequence.length, currentExerciseIndex + 2)
+                  )
+                  .map((ex, index) => {
+                    const actualIndex =
+                      Math.max(0, currentExerciseIndex - 1) + index;
+                    const isCurrent = actualIndex === currentExerciseIndex;
+                    const isPrevious = actualIndex < currentExerciseIndex;
+                    const isNext = actualIndex > currentExerciseIndex;
+                    const isFirstExercise = currentExerciseIndex === 0;
+                    const isSecondExercise =
+                      currentExerciseIndex === 0 && actualIndex === 1;
+
+                    // Calculate position based on exercise state
+                    let position;
+                    if (isFirstExercise) {
+                      position = isSecondExercise ? 1 : 0; // Center first, right for second
+                    } else {
+                      position = index - 1; // Normal positioning for other exercises
+                    }
+
+                    return (
+                      <motion.div
+                        key={ex.id}
+                        initial={{
+                          x: position * 140 + "%",
+                          opacity: 0,
+                          scale: 0.8,
+                        }}
+                        animate={{
+                          x: position * 140 + "%",
+                          opacity: isCurrent ? 1 : 0.5,
+                          scale: isCurrent ? 1.1 : 0.9,
+                        }}
+                        exit={{
+                          x: position * 140 + "%",
+                          opacity: 0,
+                          scale: 0.8,
+                        }}
+                        transition={{
+                          type: "spring",
+                          stiffness: 300,
+                          damping: 30,
+                        }}
+                        className={`p-3 rounded-md border text-center w-[140px] absolute ${
+                          isCurrent
+                            ? "bg-primary/10 border-primary"
+                            : isPrevious
+                            ? "bg-muted/50 border-muted"
+                            : "bg-muted/30"
+                        }`}
+                      >
+                        <motion.div
+                          className={`font-medium truncate ${
+                            isCurrent ? "text-lg font-bold" : ""
+                          }`}
+                          animate={{ scale: isCurrent ? 1.1 : 1 }}
+                        >
+                          {ex.name}
+                        </motion.div>
+                        <motion.div
+                          className={`text-sm text-muted-foreground ${
+                            isCurrent ? "text-base" : ""
+                          }`}
+                          animate={{ scale: isCurrent ? 1.1 : 1 }}
+                        >
+                          {ex.duration}s
+                        </motion.div>
+                      </motion.div>
+                    );
+                  })}
+              </AnimatePresence>
+            </div>
           </div>
         </CardContent>
-        <CardFooter className="flex justify-center gap-4">
-          {isRunning ? (
-            <Button size="lg" variant="outline" onClick={handlePause}>
-              <Pause className="mr-2 h-5 w-5" />
-              Пауза
-            </Button>
-          ) : (
-            <Button size="lg" onClick={handleStart} disabled={isComplete}>
-              <Play className="mr-2 h-5 w-5" />
-              {currentExerciseIndex === 0 &&
-              timeRemaining === exerciseSequence[0]?.duration
-                ? "Старт"
-                : "Продовжити"}
-            </Button>
-          )}
-          <Button size="lg" variant="outline" onClick={handleReset}>
-            <RotateCcw className="mr-2 h-5 w-5" />
-            Скинути
-          </Button>
-          <Button size="lg" variant="outline" onClick={handleSkip}>
-            <FastForward className="mr-2 h-5 w-5" />
-            Пропустити
-          </Button>
-        </CardFooter>
       </Card>
     </div>
   );

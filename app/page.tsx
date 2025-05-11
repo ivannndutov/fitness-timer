@@ -135,7 +135,7 @@ export default function Home() {
           </SidebarHeader>
           <SidebarContent>
             <SidebarGroup>
-              <SidebarGroupLabel>Your Trainings</SidebarGroupLabel>
+              <SidebarGroupLabel>Тренування</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {trainings.length === 0 ? (
